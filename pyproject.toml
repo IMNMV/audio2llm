@@ -1,0 +1,24 @@
+[project]
+name = "audio2llm"
+version = "0.1.0"
+description = "Transcribe audio to MIDI and LLM-friendly text with optional polyphonic model"
+readme = "README.md"
+requires-python = ">=3.9,<3.12"
+license = {text = "MIT"}
+authors = [{ name = "Nykko Vitali" }]
+dependencies = [
+  "numpy",
+  "librosa",
+  "soundfile",
+  "mido",
+]
+
+[project.optional-dependencies]
+poly = ["basic-pitch>=0.4.0"]
+
+[project.scripts]
+audio2llm = "audio2llm.cli:main"
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"

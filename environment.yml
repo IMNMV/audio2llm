@@ -1,0 +1,13 @@
+name: audio2llm
+channels:
+  - conda-forge
+dependencies:
+  - python>=3.9,<3.12
+  - numpy
+  - librosa
+  - pysoundfile
+  - mido
+  - pip
+  # Optional polyphonic support
+  - pip:
+      - basic-pitch>=0.4.0

@@ -9,3 +9,6 @@ __pycache__/
 *.wav
 *.mid
 *.txt
+*.egg-info/
+build/
+dist/

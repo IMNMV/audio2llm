@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import List, Optional, Tuple
 
 from .types import NoteEvent, TranscriptionMeta, TranscriptionResult
+from .quality import compute_warnings
 
 
 def transcribe_audio(
@@ -22,25 +23,24 @@ def transcribe_audio(
     Returns a TranscriptionResult with events and meta.
     """
     # Try polyphonic first if requested
+    events: Optional[List[NoteEvent]] = None
     if prefer_polyphonic:
-        result = _try_basic_pitch(path)
-        if result is not None:
-            # Fill meta
-            events = result
-            sr_loaded, tempo, key = _estimate_meta(path, sr=sr)
-            return TranscriptionResult(
-                events=events,
-                meta=TranscriptionMeta(sample_rate=sr_loaded, tempo_bpm=tempo, key=key),
-            )
-        else:
-            # Visible notice for users when polyphonic path is unavailable
+        events = _try_basic_pitch(path)
+        if events is None:
             print("[audio2llm] Basic Pitch not available or failed; using monophonic fallback.")
 
-    # Fallback to monophonic
-    events, sr_loaded = _monophonic_transcribe(path, hop_length=hop_length, sr=sr)
-    _, tempo, key = _estimate_meta(path, sr=sr_loaded)
+    if events is None:
+        events, sr_loaded = _monophonic_transcribe(path, hop_length=hop_length, sr=sr)
+        _, tempo, key, duration = _estimate_meta(path, sr=sr_loaded)
+    else:
+        sr_loaded, tempo, key, duration = _estimate_meta(path, sr=sr)
+
+    warnings = compute_warnings(events, audio_duration_sec=duration)
     return TranscriptionResult(
-        events=events, meta=TranscriptionMeta(sample_rate=sr_loaded, tempo_bpm=tempo, key=key)
+        events=events,
+        meta=TranscriptionMeta(
+            sample_rate=sr_loaded, tempo_bpm=tempo, key=key, warnings=warnings
+        ),
     )
 
 
@@ -151,12 +151,15 @@ def _monophonic_transcribe(
     return merged, sr_loaded
 
 
-def _estimate_meta(path: str, sr: Optional[int] = None) -> Tuple[int, Optional[float], Optional[str]]:
-    """Estimate tempo and key using librosa; returns (sample_rate, tempo_bpm, key_str)."""
+def _estimate_meta(
+    path: str, sr: Optional[int] = None
+) -> Tuple[int, Optional[float], Optional[str], Optional[float]]:
+    """Estimate tempo, key, and duration; returns (sample_rate, tempo_bpm, key_str, duration_sec)."""
     import numpy as np
     import librosa
 
     y, sr_loaded = librosa.load(path, sr=sr, mono=True)
+    duration = float(len(y) / sr_loaded) if sr_loaded else None
     # Tempo via beat tracking
     tempo, _ = librosa.beat.beat_track(y=y, sr=sr_loaded)
 
@@ -164,7 +167,7 @@ def _estimate_meta(path: str, sr: Optional[int] = None) -> Tuple[int, Optional[f
     chroma = librosa.feature.chroma_cqt(y=y, sr=sr_loaded)
     chroma_mean = chroma.mean(axis=1)
     key = _estimate_key_from_chroma(chroma_mean)
-    return sr_loaded, float(tempo) if tempo is not None else None, key
+    return sr_loaded, float(tempo) if tempo is not None else None, key, duration
 
 
 def _estimate_key_from_chroma(chroma_mean) -> Optional[str]:
